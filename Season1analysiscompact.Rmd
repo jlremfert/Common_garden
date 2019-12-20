@@ -30,7 +30,8 @@ n <- G[G$type=="n",]
 #Dataframe of cultivar seedlings
 c <- G[G$type=="c",]
 
-#All columns with equations in them will read in as a list rather than numeric. Haven't figured out how to avoid that yet.
+#All columns with equations in them will read in as a list rather than numeric. Haven't figured out how to avoid that yet, so I'm just creating the column I need here.
+G$Height_cm9.18.19 <- G$Height_mm9.18.19/10
 
 ```
 
