@@ -1,0 +1,513 @@
+---
+title: "Common garden so far"
+author: "Jane"
+date: "11/27/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+Reading in and cleaning up the data.
+
+```{r }
+library(ggplot2)
+library(googlesheets4)
+library(tidyverse)
+#Register sheet
+G <- read_sheet(ss="https://docs.google.com/spreadsheets/d/1ZbeKlGR9pUXoUQO2xaGx0Jt_Z1c5zNjrI_1Cgi3ZuDI/edit#gid=550678747", sheet="CG_measurements")
+
+#Filter for only seedlings included in the study
+G <- G[G$included=="y",]
+G$type <- as.factor(G$type)
+G$mom <-as.factor(G$mom)
+
+#Dataframe of native seedlings
+n <- G[G$type=="n",]
+#Dataframe of cultivar seedlings
+c <- G[G$type=="c",]
+
+#All columns with equations in them will read in as a list rather than numeric. Haven't figured out how to avoid that yet.
+
+```
+
+The variables:
+stem_base_mm5.30.18 : collected 5/30/18 shortly after the seedlings were planted in the common garden
+stem_below_contyledons_mm5.30.18 : collected 5/30/18, yes there's a typo in the name
+stemd2.18.19 : collected 2/18/19, clearly after the first growing season
+Height_cm6.24.18: height near the beginning of the first growing season
+Height_cm10.20.18: collected 10/20/19 at the end of the first growing season
+
+Summary statistics
+
+```{r}
+#Means
+#Height
+h62418c <-mean(c$Height_cm6.24.18, na.rm=TRUE)#beginning of 2018
+h62418n <-mean(n$Height_cm6.24.18, na.rm=TRUE)
+h102018c <-mean(c$Height_cm10.20.18, na.rm=TRUE)#end of 2018
+h102018n <-mean(n$Height_cm10.20.18, na.rm=TRUE)
+h5219c <-mean(c$Height_cm5.2.19, na.rm=TRUE)#beginning of 2019
+h5219n <-mean(n$Height_cm5.2.19, na.rm=TRUE)
+h91819c <-mean((c$Height_mm9.18.19/10), na.rm=TRUE)#end of 2019
+h91819n <-mean((n$Height_mm9.18.19/10), na.rm=TRUE)
+
+#differences in the mean height over time
+height <-data.frame(type=c(rep("native",4),rep("cultivar",4)),height=c(h62418n,h102018n,h5219n,h91819n,h62418c,h102018c,h5219c,h91819c), census=c(1:4))
+
+h <- ggplot(height) + geom_line(aes(x=census, y=height, color=type))+theme_bw()+ylab("Height")
+h
+
+
+#Stem diameter
+sd53018c <- mean(c$stem_below_cotyledons_mm5.30.18, na.rm=TRUE)#beginning of 2018
+sd53018n <- mean(n$stem_below_cotyledons_mm5.30.18, na.rm=TRUE)
+sd21819c <- mean(c$stemd2.18.19, na.rm=TRUE)#End of season 1
+sd21819n <- mean(n$stemd2.18.19, na.rm=TRUE)
+sd5219c <- mean(c$stemd5.2.19, na.rm=TRUE)#Beginning of season 2
+sd5219n <- mean(n$stemd5.2.19, na.rm=TRUE)
+sd91719c <- mean(c$stemd9.17.19, na.rm=TRUE)#End of season 2
+sd91719n <- mean(n$stemd9.17.19, na.rm=TRUE)
+
+```
+
+##**Stem diameter**
+
+```{r}
+library(nlme)
+library(multcomp)
+library(lmerTest)
+
+#Beginning of the experiment
+#Stemdiameter 5/30/18
+#Get rid of those NA values
+g <-G %>% drop_na(stem_base_mm5.30.18)
+g$stem_base_mm5.30.18 <-scale(g$stem_base_mm5.30.18, center=TRUE,scale = TRUE)
+stemres53018 <-lm(g$stem_base_mm5.30.18~g$days)
+g$stemres53018<-stemres53018$residuals
+#residuals
+qqnorm(g$stemres53018)
+shapiro.test(g$stemres53018)
+
+#Model with May 30th, 2018 stem diameter residuals as afunction of mom and type
+mod1 <- lmer(g$stemres53018~(1|g$mom)+g$type)
+summary(mod1)
+#Model with stem residuals as a function of mom and type but a different function
+mod2 <- lme(stemres53018~type,data=g, random= ~ type|mom)
+summary(mod2)
+#Model withs stem diameter as a funciton of grow days, mom, and type
+mod <- lmer(g$stem_base_mm5.30.18~g$days+(1|g$mom)+g$type)
+summary(mod)
+
+#End of growning season 1
+#Stemdiameter 2/18/19
+#Get rid of those NA values
+g <-G %>% drop_na(stemd2.18.19)
+#Regress out the grow days
+stemres21819 <-lm(g$stemd2.18.19~g$days)
+#Add the residuals to the data frame
+g$stemres21819<-stemres21819$residuals
+#Looking at theresiduals
+qqnorm(g$stemres21819)
+shapiro.test(g$stemres21819)
+#Model with Feb 18, 2019 stem residuals as a function of mom and type
+mod1 <- lmer(g$stemres21819~(1|g$mom)+g$type)
+summary(mod1)
+#Model with Feb 18, 2019 stem residuals as a function of mom and type with a different function
+mod2 <- lme(stemres21819~type,data=g, random= ~ type|mom)
+summary(mod2)
+#Model with Feb 18, 2019 stem diameter as a function of mom and type
+mod <- lmer(g$stemd2.18.19~g$days+(1|g$mom)+g$type)
+summary(mod)
+
+
+#Near the beginning of growing season 2
+#Stemdiameter 5/2/19
+#Get rid of those NA values
+g <-G %>% drop_na(stemd5.2.19)
+
+stemres5219 <-lm(g$stemd5.2.19~g$days)
+g$stemres5219<-stemres5219$residuals
+
+qqnorm(g$stemres5219)
+shapiro.test(g$stemres5219)
+
+mod1 <- lmer(g$stemres5219~(1|g$mom)+g$type)
+summary(mod1)
+
+mod <- lmer(g$stemd5.2.19~g$days+(1|g$mom)+g$type)
+summary(mod)
+
+#mod2 <- lme(stemres5219~type,data=g, random= ~ type|mom)
+#summary(mod2)
+
+#Get rid of those NA values
+#Stemdiameter 9/17/19
+g <-G %>% drop_na(stemd9.17.19)
+
+stemres91719 <-lm(g$stemd9.17.19~g$days)
+g$stemres<-stemres91719$residuals
+
+qqnorm(g$stemres)
+shapiro.test(g$stemres)
+
+mod1 <- lmer(g$stemres~(1|g$mom)+g$type)
+summary(mod1)
+
+mod <- lmer(g$stemd9.17.19~g$days+(1|g$mom)+g$type)
+summary(mod)
+
+#mod2 <- lme(stemres~type,data=g, random= ~ type|mom)
+#summary(mod2)
+```
+
+###Non-nested, non-parametric test.
+
+```{r}
+#non-nested
+anov <-aov(stemres~type, g)
+summary(anov)
+
+#non-parametric
+kruskal.test(stemres~type,g)
+
+```
+
+
+##**Height**
+
+```{r}
+#Height 6/24/18
+#Get rid of those NA values
+g <-G %>% drop_na(Height_cm6.24.18)
+
+h62418res <-lm(g$Height_cm6.24.18~g$days)
+g$h62418res<-h62418res$residuals
+
+qqnorm(g$h62418res)
+shapiro.test(g$h62418res)
+
+mod1 <- lmer(g$h62418res~(1|g$mom)+g$type)
+summary(mod1)
+
+mod <- lmer(g$Height_cm6.24.18~g$days+(1|g$mom)+g$type)
+summary(mod)
+
+mod2 <- lme(h62418res~type,data=g, random= ~ type|mom)
+summary(mod2)
+
+#Height 10/20/18
+g <-G %>% drop_na(Height_cm10.20.18)
+
+h102018res <-lm(g$Height_cm10.20.18~g$days)
+g$h102018res<-h102018res$residuals
+
+qqnorm(g$h102018res)
+shapiro.test(g$h102018res)
+
+mod1 <- lmer(g$h102018res~(1|g$mom)+g$type)
+summary(mod1)
+
+mod <- lmer(g$Height_cm10.20.18~g$days+(1|g$mom)+g$type)
+summary(mod)
+
+#mod2 <- lme(h102018res~type,data=g, random= ~ type|mom)
+#summary(mod2)
+
+#Height 5/2/19
+g <-G %>% drop_na(Height_cm5.2.19)
+
+h5219res <-lm(g$Height_cm5.2.19~g$days)
+g$h5219res<-h5219res$residuals
+
+qqnorm(g$h5219res)
+shapiro.test(g$h5219res)
+
+mod1 <- lmer(g$h5219res~(1|g$mom)+g$type)
+summary(mod1)
+
+mod <- lmer(g$Height_cm5.2.19~g$days+(1|g$mom)+g$type)
+summary(mod)
+
+mod2 <- lme(h5219res~type,data=g, random= ~ type|mom)
+summary(mod2)
+
+
+#Height 9/18/19
+g <-G %>% drop_na(Height_cm9.18.19)
+
+g$daysln <- log(g$days)
+h91819res <-lm(g$Height_cm9.18.19~g$days)
+g$h91819res<-h91819res$residuals
+
+qqnorm(g$h91819res)
+shapiro.test(g$h91819res)
+
+mod1 <- lmer(g$h91819res~(1|g$mom)+g$type)
+summary(mod1)
+
+mod <- lmer(g$Height_cm9.18.19~g$days+(1|g$mom)+g$type)
+summary(mod)
+
+mod2 <- lme(h91819res~type,data=g, random= ~ type|mom)
+summary(mod2)
+```
+
+
+##**Herbivory total
+
+```{r}
+g <-G %>% drop_na(Herbivory7.22.19)
+#Herbivory as a function of mom and type
+mod1 <- lmer(g$Herbivory7.22.19~(1|g$mom)+g$type)
+summary(mod1)
+
+herb <-ggplot(g)
+herb <- herb + geom_boxplot(na.rm=TRUE,aes(x=factor(type),y=Herbivory7.22.19, color=type), notch = FALSE)+theme_bw()+ylab("% herbivory")+ylim(0,100)
+herb <- herb +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+herb <- herb +theme(legend.position = "none", axis.title.x=element_blank())
+herb <- herb + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+herb
+#ggsave(herb, filename = "herbivory.png")
+
+```
+
+##**Number of leaves
+
+```{r}
+#Number of leaves beginning of season
+g <-G %>% drop_na(leafcount7.9.19)
+mod <- lmer(g$leafcount7.9.19~(1|g$mom)+g$type)
+summary(mod)
+
+#g$leafcount7.9.19sq <-sqrt(g$leafcount7.9.19)
+
+boxl <-ggplot(g)
+boxl <- boxl + geom_boxplot(na.rm=TRUE,aes(x=factor(type),y=leafcount7.9.19, color=type), notch = TRUE)+theme_bw()+ylab("Number of leaves")+ylim(0,40)
+boxl <- boxl +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+boxl <- boxl +theme(legend.position = "none", axis.title.x=element_blank())
+boxl <- boxl + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+boxl
+#ggsave(boxl, filename = "leavesJuly.png")
+
+#Number of leaves end of season
+g <-G %>% drop_na(Total_leaves09.08.19)
+
+mod <- lmer(g$Total_leaves09.08.19~(1|g$mom)+g$type)
+summary(mod)
+
+#g$Total_leaves09.08.19sq <- sqrt(g$Total_leaves09.08.19)
+
+boxl1 <-ggplot(g)
+boxl1 <- boxl1 + geom_boxplot(na.rm=TRUE,aes(x=factor(type),y=Total_leaves09.08.19, color=type), notch = TRUE)+theme_bw()+ylab("Number of leaves")+ylim(0,40)
+boxl1 <- boxl1 +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+boxl1 <- boxl1 +theme(legend.position = "none", axis.title.x=element_blank())
+boxl1 <- boxl1 + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+boxl1
+#ggsave(boxl1, filename = "leavesSept.png")
+
+```
+
+##**Number of Secondary Branches
+```{r}
+#Number of leaves end of season
+g <-G %>% drop_na(num_secondarybranches)
+
+mod <- lmer(g$num_secondarybranches~(1|g$mom)+g$type)
+summary(mod)
+
+#g$num_secondarybranchessq <- sqrt(g$num_secondarybranches)
+
+boxl1 <-ggplot(g)
+boxl1 <- boxl1 + geom_boxplot(na.rm=TRUE,aes(x=factor(type),y=num_secondarybranches, color=type), notch = FALSE)+theme_bw()+ylab("Number of secondary branches")+ylim(0,5)
+boxl1 <- boxl1 +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+boxl1 <- boxl1 +theme(legend.position = "none", axis.title.x=element_blank())
+boxl1 <- boxl1 + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+boxl1
+#ggsave(boxl1, filename = "Secondarybranches.png")
+
+
+```
+
+## Plots
+
+Plots
+
+```{r pressure, echo=FALSE}
+
+#Boxplot Stem diameter 5/30/18
+boxs1 <-ggplot(G)
+boxs1 <- boxs1 + geom_boxplot(aes(x=factor(type),y=stem_base_mm5.30.18, color=type), notch = TRUE)+theme_bw()+ylab("Stem diameter (mm)")+ylim(0,4)
+boxs1 <- boxs1 +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+boxs1 <- boxs1 +theme(legend.position = "none", axis.title.x=element_blank())
+boxs1 <- boxs1 + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+boxs1
+#ggsave(boxs1, filename = "stem_base53018.png")
+
+#Stem diameter 2/18/19
+boxs2 <-ggplot(G)
+boxs2 <- boxs2 + geom_boxplot(na.rm=TRUE,aes(x=factor(type),y=stemd2.18.19, color=type), notch = TRUE)+theme_bw()+ylab("Stem diameter (mm)")+ylim(0,4)
+boxs2 <- boxs2 +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+boxs2 <- boxs2 + theme(legend.position = "none", axis.title.x=element_blank())
+boxs2 <- boxs2 + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+boxs2
+#ggsave(boxs2, filename = "stem_diameter21819.png")
+
+#Stem diameter 5/2/19
+boxs3 <-ggplot(G)
+boxs3 <- boxs3 + geom_boxplot(na.rm=TRUE,aes(x=factor(type),y=stemd5.2.19, color=type), notch = TRUE)+theme_bw()+ylab("Stem diameter (mm)")+ylim(0,4)
+boxs3 <- boxs3 +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+boxs3 <- boxs3 + theme(legend.position = "none", axis.title.x=element_blank())
+boxs3 <- boxs3 + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+boxs3
+#ggsave(boxs3, filename = "stem_diameter5219.png")
+
+#Stem diameter 9/17/19
+boxs4 <-ggplot(G)
+boxs4 <- boxs4 + geom_boxplot(na.rm=TRUE,aes(x=factor(type),y=stem_diameter091719, color=type), notch = TRUE)+theme_bw()+ylab("Stem diameter (mm)")+ylim(0,4)
+boxs4 <- boxs4 +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+boxs4 <- boxs4 + theme(legend.position = "none", axis.title.x=element_blank())
+boxs4 <- boxs4 + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+boxs4
+#ggsave(boxs4, filename = "stem_diameter91719.png")
+
+
+#Height 6/24/18
+boxh <-ggplot(G)
+boxh <- boxh + geom_boxplot(na.rm=TRUE,aes(x=factor(type),y=Height_cm6.24.18, color=type), notch = TRUE)+theme_bw()+ylab("Plant Height (cm)")+ylim(0,30)
+boxh <- boxh +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+boxh <- boxh + theme(legend.position = "none", axis.title.x=element_blank())
+boxh <- boxh + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+boxh
+#ggsave(boxh, filename = "height62418.png")
+
+#Height 9/18/19
+boxh1 <-ggplot(G)
+boxh1 <- boxh1 + geom_boxplot(aes(x=factor(type),y=Height_cm9.18.19, color=type), notch = TRUE)+theme_bw()+ylab("Plant Height (cm)")+ylim(0,30)
+boxh1 <- boxh1 +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+boxh1 <- boxh1 + theme(legend.position = "none", axis.title.x=element_blank())
+boxh1 <- boxh1 + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+boxh1
+#ggsave(boxh1, filename = "height91819.png")
+
+
+
+```
+
+
+#Survival
+
+```{r}
+first <-G %>% drop_na(stem_base_mm5.30.18) #plants alive 5/30/18
+fn <- nrow(first[first$type=="n",])
+fc <- nrow(first[first$type=="c",])
+second <- G %>% drop_na(Height_cm6.24.18) #plants alive 6/24/18
+sn <- nrow(second[second$type=="n",])
+sc <- nrow(second[second$type=="c",])
+third <-G %>% drop_na(Height_cm10.20.18) #plants alive 10/20/18
+tn <- nrow(third[third$type=="n",])
+tc <- nrow(third[third$type=="c",])
+fourth <-G %>% drop_na(Height_cm5.2.19) #plants alive 5/2/19
+Fn <- nrow(fourth[fourth$type=="n",])
+Fc <- nrow(fourth[fourth$type=="c",])
+fifth <-G %>% drop_na(Height_cm9.18.19) #plants alive 9/18/19
+ffn <- nrow(fifth[fifth$type=="n",])
+ffc <- nrow(fifth[fifth$type=="c",])
+
+
+#Percent survival
+n1 <-fn/fn*100
+c1 <-fc/fc*100
+n2 <-sn/fn*100
+c2 <-sc/fc*100
+n3 <-tn/fn*100
+c3 <-tc/fc*100
+n4 <-Fn/fn*100
+c4 <-Fc/fc*100
+n5 <-ffn/fn*100
+c5 <-ffc/fc*100
+
+
+native <- data.frame(ncensus=c(1:5), nsurvival=c(n1,n2,n3,n4,n5))
+cultivar <- data.frame(ccensus=c(1:5), csurvival=c(c1,c2,c3,c4,c5))
+
+
+
+survive <- glmer(survival~type+(1|mom), data=first, family="binomial")
+summary(survive)
+
+nrow(fifth[fifth$type=="n",])/nrow(n)*100
+nrow(fifth[fifth$type=="c",])/nrow(c)*100
+
+```
+
+#Survival plots
+
+```{r}
+census <-data.frame(num=c(1:5),date=c(1:5),survival=c(n1,n2,n3,n4,n5,c1,c2,c3,c4,c5),type=c(rep("native",5),rep("cultivar",5)))
+
+
+g <- ggplot(census) + geom_line(aes(x=date, y=survival, color=type))+theme_bw()+ylab("% Survival")
+g <-g+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+g <-g + theme(legend.justification=c(1,1), legend.position=c(0.25,0.35)) + ylim(75,100)
+g <- g +theme(axis.title.x=element_blank())+scale_color_manual(values=c("#006622", "#00b33c"))
+g <- g + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+g
+
+#ggsave(g, filename = "survival.png")
+```
+
+
+##**Biomass**##
+
+```{r}
+#Register sheet
+a <- read_sheet(ss="https://docs.google.com/spreadsheets/d/1zQ7bHuapb72X1cdpxU3ix6otKdnox51Numy6cUaS97g/edit#gid=0", sheet="CG_biomass")
+
+#Filter for only seedlings included in the study
+a <- a[a$included=="y",]
+a$type <- as.factor(a$type)
+a$mom <-as.factor(a$mom)
+a$stemt <-a$stem_AGB+a$Stem
+#Dataframe of native seedlings
+n <- a[a$type=="n",]
+#Dataframe of cultivar seedlings
+c <- a[a$type=="c",]
+
+AGBlc <-mean(c$leaf_AGB,na.rm=TRUE)
+AGBln <-mean(n$leaf_AGB,na.rm=TRUE)
+AGBsc <-mean(c$stemt,na.rm=TRUE)
+AGBsn <-mean(n$stemt,na.rm=TRUE)
+
+#Leaf AGB
+A <-a %>% drop_na(leaf_AGB)
+
+mod <- lmer(A$leaf_AGB~(1|A$mom)+A$type)
+summary(mod)
+
+abg <-ggplot(a)
+abg <- abg + geom_boxplot(na.rm=TRUE,aes(x=factor(type),y=leaf_AGB, color=type), notch = TRUE)+theme_bw()+ylab("Leaf AGB (g)")+ylim(0,3)
+abg <- abg +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+abg <- abg +theme(legend.position = "none", axis.title.x=element_blank())
+abg <- abg + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+abg
+#ggsave(abg, filename = "leafabg.png")
+
+#Stem AGB
+A <-a %>% drop_na(stem_AGB)
+
+mod <- lmer(A$stem_AGB~(1|A$mom)+A$type)
+summary(mod)
+
+abg <-ggplot(a)
+abg <- abg + geom_boxplot(na.rm=TRUE,aes(x=factor(type),y=stem_AGB, color=type), notch = TRUE)+theme_bw()+ylab("Stem AGB (g)")+ylim(0,3)
+abg <- abg +scale_color_manual(values=c("#006622", "#00b33c"))+ theme(panel.background = element_rect(fill = "white"),plot.background = element_rect(fill = "transparent",colour = NA),text = element_text(size=20))
+abg <- abg +theme(legend.position = "none", axis.title.x=element_blank())
+abg <- abg + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+abg
+#ggsave(abg, filename = "stemabg.png")
+
+```
